@@ -1,0 +1,11 @@
+'use strict';
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+app.use(express.json());
+app.get('/health', (_req, res) => res.json({ status: 'ok', ts: new Date() }));
+const transferRoutes = require('./reallocation/transferRoutes');
+app.use('/api/transfers', transferRoutes);
+app.use((err, _req, res, _next) => { console.error(err.stack); res.status(500).json({ error: err.message }); });
+app.listen(PORT, () => console.log(`POS server running on port ${PORT}`));
+module.exports = app;

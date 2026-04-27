@@ -1,0 +1,26 @@
+{
+  "name": "pharmacy-pos",
+  "version": "1.0.0",
+  "description": "Pharmacy POS System with Multi-Branch Reallocation Module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "scheduler": "node src/jobs/scheduler.js",
+    "test": "jest --coverage"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "express": "^4.18.2",
+    "mysql2": "^3.6.0",
+    "node-cron": "^3.0.3",
+    "sequelize": "^6.35.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
