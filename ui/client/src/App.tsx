@@ -16,6 +16,8 @@ import PrescriptionPage from "./pages/PrescriptionPage";
 import InsuranceClaimsPage from "./pages/InsuranceClaimsPage";
 import FinanceReportingPage from "./pages/FinanceReportingPage";
 import TransferRequestPage from "./pages/TransferRequestPage";
+import UsersPage from "./pages/UsersPage";
+import ReportsAnalyticsPage from "./pages/ReportsAnalyticsPage";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -32,6 +34,8 @@ function Router() {
       <Route path={"/insurance-claims"} component={InsuranceClaimsPage} />
       <Route path={"/finance"} component={FinanceReportingPage} />
       <Route path={"/transfers"} component={TransferRequestPage} />
+      <Route path={"/users"} component={UsersPage} />
+      <Route path={"/reports"} component={ReportsAnalyticsPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
