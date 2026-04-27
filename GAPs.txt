@@ -1,0 +1,17 @@
+❌ Gap 1 — SQL: Only 2 tables exist out of ~20+ referenced
+The ER diagrams in the source document define these tables. None of them have been created:
+TableReferenced Insale, sale_item, paymentPOS-STD-001, ER Diagram §1products / drugsEvery sectioninventory_batchesINV-GRN-001, INV-FEFO-001purchase_order, grn, grn_itemINV-GRN-001 ERsuppliersINV-GRN-001 ERprescription, prescription_itemRX-VER-001 ERdispensing_recordPOS-PRS-001, RX-VER-001 ERprescribersRX-VER-001 ERcustomers / patientsCUST-REG-001 (only the stored proc references it)backorderPOS-PRS-001 partial dispensingcredit_account, credit_transactionCUST-CREDIT-001insurance_scheme, insurance_memberINS-CLM-001 ERinsurance_claim, claim_itemINS-CLM-001 ERsms_queueCUST-REG-001, INV-CONT-001loyalty_pointsCUST §4 ERallergy_record, chronic_condition, visit_historyCUST §4 ERusers, rolesRoles & Responsibilities §10variance_logFIN-CASH-001
+
+❌ Gap 2 — Source files referenced but never created
+FileReferenced Insrc/server.jsecosystem.config.js entry pointsrc/db.jsEvery src/**/*.js via require('../db')src/jobs/scheduler.jsPM2 ecosystem filesrc/jobs/applyLateFees.jsCrontab in DEPLOYMENT.mdsrc/jobs/expiryAlerts.jsCrontab in DEPLOYMENT.mdsrc/jobs/reorderAlerts.jsCrontab in DEPLOYMENT.mdsrc/jobs/monthlyArchive.jsCrontab in DEPLOYMENT.mdsrc/jobs/apiKeyRotationAlert.jsCrontab in DEPLOYMENT.md
+
+❌ Gap 3 — Config & scripts referenced but not in repo
+FileReferenced Inpackage.jsonNothing deploys without it.env.exampleDEPLOYMENT.md §5: cp .env.example .envecosystem.config.jsDEPLOYMENT.md §7 (defined there, not in repo)scripts/backup.shDEPLOYMENT.md §9 cron
+
+❌ Gap 4 — docs/ folder is empty
+README lists 11 section files (docs/01-sales-billing.md → docs/11-response-times.md). None exist.
+
+Summary
+LayerDeliveredMissingSQL Tables2 of ~20~18 tablesSQL Stored Procs3 of 3✅ CompleteSource files7 of 158 filesConfig/scripts3 of 74 filesDocs sections0 of 1111 filesQuick guides3 of 3✅ CompleteWorkflow/Deploy2 of 2✅ Complete
+
+
