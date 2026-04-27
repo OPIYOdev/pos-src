@@ -1,35 +1,127 @@
+/**
+ * Database Connection Pool
+ * MySQL connection management with pooling and error handling
+ */
+
 'use strict';
-const { Sequelize, DataTypes, Op } = require('sequelize');
-const sequelize = new Sequelize(
-  process.env.DB_NAME || 'pharmacy_pos',
-  process.env.DB_USER || 'root',
-  process.env.DB_PASSWORD || '',
-  { host: process.env.DB_HOST || 'localhost', port: parseInt(process.env.DB_PORT||'3306',10), dialect:'mysql', logging:false }
-);
-const Branch = sequelize.define('Branch',{ branch_name:{type:DataTypes.STRING,allowNull:false}, region:{type:DataTypes.STRING}, is_active:{type:DataTypes.BOOLEAN,defaultValue:true}, manager_id:{type:DataTypes.INTEGER}, regional_manager_id:{type:DataTypes.INTEGER}, pharmacy_lead_id:{type:DataTypes.INTEGER} },{ tableName:'branches', timestamps:true, underscored:true });
-const Drug = sequelize.define('Drug',{ generic_name:{type:DataTypes.STRING,allowNull:false}, brand_name:{type:DataTypes.STRING}, drug_category:{type:DataTypes.STRING}, unit_of_measure:{type:DataTypes.STRING}, is_controlled:{type:DataTypes.BOOLEAN,defaultValue:false}, requires_cold_chain:{type:DataTypes.BOOLEAN,defaultValue:false} },{ tableName:'drugs', timestamps:true, underscored:true });
-const InventoryBatch = sequelize.define('InventoryBatch',{ batch_number:{type:DataTypes.STRING,allowNull:false}, drug_id:{type:DataTypes.INTEGER,allowNull:false}, branch_id:{type:DataTypes.INTEGER,allowNull:false}, quantity_available:{type:DataTypes.DECIMAL(10,3),defaultValue:0}, quantity_reserved:{type:DataTypes.DECIMAL(10,3),defaultValue:0}, expiry_date:{type:DataTypes.DATEONLY,allowNull:false}, cost_price:{type:DataTypes.DECIMAL(12,2)}, selling_price:{type:DataTypes.DECIMAL(12,2)}, is_quarantined:{type:DataTypes.BOOLEAN,defaultValue:false}, is_reserved:{type:DataTypes.BOOLEAN,defaultValue:false} },{ tableName:'inventory_batches', timestamps:true, underscored:true });
-const TransferRequest = sequelize.define('TransferRequest',{ request_id:{type:DataTypes.STRING,allowNull:false,unique:true}, source_branch_id:{type:DataTypes.INTEGER,allowNull:false}, destination_branch_id:{type:DataTypes.INTEGER,allowNull:false}, requested_by:{type:DataTypes.INTEGER}, approved_by:{type:DataTypes.INTEGER}, approved_at:{type:DataTypes.DATE}, priority:{type:DataTypes.ENUM('URGENT','NORMAL','LOW'),defaultValue:'NORMAL'}, status:{type:DataTypes.STRING,defaultValue:'PENDING_APPROVAL'}, total_items:{type:DataTypes.INTEGER,defaultValue:0}, total_estimated_value:{type:DataTypes.DECIMAL(15,2),defaultValue:0}, reason:{type:DataTypes.TEXT}, rejection_reason:{type:DataTypes.TEXT}, allow_partial:{type:DataTypes.BOOLEAN,defaultValue:false}, auto_generated:{type:DataTypes.BOOLEAN,defaultValue:false}, required_by_date:{type:DataTypes.DATEONLY}, drug_id:{type:DataTypes.INTEGER} },{ tableName:'transfer_requests', timestamps:true, underscored:true });
-const TransferRequestItem = sequelize.define('TransferRequestItem',{ transfer_request_id:{type:DataTypes.BIGINT,allowNull:false}, drug_id:{type:DataTypes.INTEGER,allowNull:false}, quantity_requested:{type:DataTypes.DECIMAL(10,2),allowNull:false}, quantity_approved:{type:DataTypes.DECIMAL(10,2),defaultValue:0}, batch_preference:{type:DataTypes.ENUM('FEFO','SPECIFIC'),defaultValue:'FEFO'}, status:{type:DataTypes.STRING,defaultValue:'PENDING'} },{ tableName:'transfer_request_items', timestamps:false, underscored:true });
-const TransferOrder = sequelize.define('TransferOrder',{ transfer_request_id:{type:DataTypes.BIGINT}, order_number:{type:DataTypes.STRING,allowNull:false,unique:true}, source_branch_id:{type:DataTypes.INTEGER,allowNull:false}, destination_branch_id:{type:DataTypes.INTEGER,allowNull:false}, status:{type:DataTypes.STRING,defaultValue:'CREATED'}, priority:{type:DataTypes.ENUM('URGENT','NORMAL','LOW'),defaultValue:'NORMAL'}, created_by:{type:DataTypes.INTEGER}, received_by:{type:DataTypes.INTEGER}, waybill_id:{type:DataTypes.BIGINT}, transporter_details:{type:DataTypes.JSON}, expected_delivery_date:{type:DataTypes.DATEONLY}, dispatched_at:{type:DataTypes.DATE}, received_at:{type:DataTypes.DATE}, completed_at:{type:DataTypes.DATE} },{ tableName:'transfer_orders', timestamps:true, underscored:true });
-const TransferOrderItem = sequelize.define('TransferOrderItem',{ transfer_order_id:{type:DataTypes.BIGINT,allowNull:false}, drug_id:{type:DataTypes.INTEGER,allowNull:false}, batch_id:{type:DataTypes.INTEGER,allowNull:false}, quantity:{type:DataTypes.DECIMAL(10,2),allowNull:false}, unit_cost:{type:DataTypes.DECIMAL(12,2)}, total_cost:{type:DataTypes.DECIMAL(15,2)}, status:{type:DataTypes.STRING,defaultValue:'PENDING'} },{ tableName:'transfer_order_items', timestamps:false, underscored:true });
-const Waybill = sequelize.define('Waybill',{ transfer_order_id:{type:DataTypes.BIGINT,allowNull:false}, waybill_number:{type:DataTypes.STRING,allowNull:false,unique:true}, transporter_name:{type:DataTypes.STRING}, transporter_contact:{type:DataTypes.STRING}, vehicle_number:{type:DataTypes.STRING}, driver_name:{type:DataTypes.STRING}, estimated_arrival:{type:DataTypes.DATE}, actual_arrival:{type:DataTypes.DATE} },{ tableName:'waybills', timestamps:true, underscored:true });
-const TransferReceiving = sequelize.define('TransferReceiving',{ transfer_order_id:{type:DataTypes.BIGINT,allowNull:false}, received_by:{type:DataTypes.INTEGER}, received_at:{type:DataTypes.DATE}, verification_status:{type:DataTypes.STRING,defaultValue:'PENDING'}, discrepancy_details:{type:DataTypes.JSON}, completed_at:{type:DataTypes.DATE} },{ tableName:'transfer_receiving', timestamps:false, underscored:true });
-const TransferReconciliation = sequelize.define('TransferReconciliation',{ transfer_order_id:{type:DataTypes.BIGINT,allowNull:false}, source_branch_confirmed:{type:DataTypes.BOOLEAN,defaultValue:false}, destination_branch_confirmed:{type:DataTypes.BOOLEAN,defaultValue:false}, verification_status:{type:DataTypes.STRING,defaultValue:'PENDING'}, discrepancy_details:{type:DataTypes.JSON}, resolution_status:{type:DataTypes.STRING,defaultValue:'OPEN'}, status:{type:DataTypes.STRING,defaultValue:'PENDING'} },{ tableName:'transfer_reconciliation', timestamps:true, underscored:true });
-const TransferDispute = sequelize.define('TransferDispute',{ transfer_order_id:{type:DataTypes.BIGINT,allowNull:false}, transfer_item_id:{type:DataTypes.BIGINT}, dispute_type:{type:DataTypes.ENUM('QUANTITY_SHORT','QUANTITY_EXCESS','DAMAGED','EXPIRED','WRONG_PRODUCT'),allowNull:false}, description:{type:DataTypes.TEXT}, expected_quantity:{type:DataTypes.DECIMAL(10,2)}, received_quantity:{type:DataTypes.DECIMAL(10,2)}, damaged_quantity:{type:DataTypes.DECIMAL(10,2)}, evidence_photos:{type:DataTypes.JSON}, resolution_status:{type:DataTypes.STRING,defaultValue:'OPEN'}, resolution_action:{type:DataTypes.TEXT}, credit_note_issued:{type:DataTypes.BOOLEAN,defaultValue:false}, credit_note_number:{type:DataTypes.STRING}, resolved_by:{type:DataTypes.INTEGER}, resolved_at:{type:DataTypes.DATE}, escalated_to:{type:DataTypes.INTEGER}, escalated_at:{type:DataTypes.DATE}, created_by:{type:DataTypes.INTEGER} },{ tableName:'transfer_disputes', timestamps:true, underscored:true });
-const TransferCost = sequelize.define('TransferCost',{ transfer_order_id:{type:DataTypes.BIGINT,allowNull:false}, cost_type:{type:DataTypes.ENUM('TRANSPORT','HANDLING','INSURANCE','STORAGE','OTHER'),allowNull:false}, amount:{type:DataTypes.DECIMAL(15,2),allowNull:false}, currency:{type:DataTypes.STRING(3),defaultValue:'KES'}, paid_by_branch_id:{type:DataTypes.INTEGER}, allocated_to_branch_id:{type:DataTypes.INTEGER}, invoice_number:{type:DataTypes.STRING}, description:{type:DataTypes.TEXT} },{ tableName:'transfer_costs', timestamps:true, underscored:true });
-const InterBranchSettlement = sequelize.define('InterBranchSettlement',{ branch_id:{type:DataTypes.INTEGER,allowNull:false}, settlement_month:{type:DataTypes.DATEONLY,allowNull:false}, value_sent:{type:DataTypes.DECIMAL(15,2),defaultValue:0}, value_received:{type:DataTypes.DECIMAL(15,2),defaultValue:0}, net_settlement:{type:DataTypes.DECIMAL(15,2),defaultValue:0}, status:{type:DataTypes.ENUM('OWED_TO_CORPORATE','OWED_FROM_CORPORATE','BALANCED'),defaultValue:'BALANCED'}, generated_at:{type:DataTypes.DATE} },{ tableName:'inter_branch_settlements', timestamps:false, underscored:true });
-const TransferAlertLog = sequelize.define('TransferAlertLog',{ transfer_order_id:{type:DataTypes.BIGINT}, event_type:{type:DataTypes.STRING}, recipients:{type:DataTypes.JSON}, message:{type:DataTypes.JSON}, sent_at:{type:DataTypes.DATE} },{ tableName:'transfer_alert_log', timestamps:false, underscored:true });
-Branch.hasMany(TransferRequest,{ foreignKey:'source_branch_id', as:'outboundRequests' });
-Branch.hasMany(TransferRequest,{ foreignKey:'destination_branch_id', as:'inboundRequests' });
-TransferRequest.hasMany(TransferRequestItem,{ foreignKey:'transfer_request_id' });
-TransferRequestItem.belongsTo(TransferRequest,{ foreignKey:'transfer_request_id' });
-TransferRequestItem.belongsTo(Drug,{ foreignKey:'drug_id' });
-TransferOrder.hasMany(TransferOrderItem,{ foreignKey:'transfer_order_id' });
-TransferOrderItem.belongsTo(TransferOrder,{ foreignKey:'transfer_order_id' });
-TransferOrderItem.belongsTo(Drug,{ foreignKey:'drug_id' });
-TransferOrderItem.belongsTo(InventoryBatch,{ foreignKey:'batch_id', as:'Batch' });
-TransferOrder.belongsTo(Branch,{ foreignKey:'source_branch_id', as:'sourceBranch' });
-TransferOrder.belongsTo(Branch,{ foreignKey:'destination_branch_id', as:'destinationBranch' });
-TransferOrder.belongsTo(TransferRequest,{ foreignKey:'transfer_request_id' });
-module.exports = { sequelize, Sequelize, Op, Branch, Drug, InventoryBatch, TransferRequest, TransferRequestItem, TransferOrder, TransferOrderItem, Waybill, TransferReceiving, TransferReconciliation, TransferDispute, TransferCost, InterBranchSettlement, TransferAlertLog };
+
+const mysql = require('mysql2/promise');
+const { logger } = require('./utils/logger');
+
+const DATABASE_URL = process.env.DATABASE_URL;
+
+let pool = null;
+
+/**
+ * Initialize database connection pool
+ */
+async function initializePool() {
+  try {
+    if (!DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable not set');
+    }
+
+    pool = mysql.createPool({
+      connectionLimit: 10,
+      enableKeepAlive: true,
+      keepAliveInitialDelayMs: 0,
+      waitForConnections: true,
+      queueLimit: 0,
+      uri: DATABASE_URL,
+      multipleStatements: true,
+      timezone: '+00:00',
+    });
+
+    // Test connection
+    const connection = await pool.getConnection();
+    await connection.ping();
+    connection.release();
+
+    logger.info('Database connection pool initialized successfully');
+    return pool;
+  } catch (err) {
+    logger.error(`Failed to initialize database pool: ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Get database connection from pool
+ */
+async function getConnection() {
+  if (!pool) {
+    await initializePool();
+  }
+
+  try {
+    return await pool.getConnection();
+  } catch (err) {
+    logger.error(`Failed to get database connection: ${err.message}`);
+    throw err;
+  }
+}
+
+/**
+ * Execute query with connection pooling
+ */
+async function query(sql, values = []) {
+  const connection = await getConnection();
+
+  try {
+    const [results] = await connection.execute(sql, values);
+    return results;
+  } catch (err) {
+    logger.error(`Query execution failed: ${err.message}`);
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * Execute multiple queries in transaction
+ */
+async function transaction(queries) {
+  const connection = await getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const results = [];
+    for (const { sql, values } of queries) {
+      const [result] = await connection.execute(sql, values);
+      results.push(result);
+    }
+
+    await connection.commit();
+    return results;
+  } catch (err) {
+    await connection.rollback();
+    logger.error(`Transaction failed: ${err.message}`);
+    throw err;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * Close database connection pool
+ */
+async function closePool() {
+  if (pool) {
+    try {
+      await pool.end();
+      logger.info('Database connection pool closed');
+    } catch (err) {
+      logger.error(`Failed to close connection pool: ${err.message}`);
+    }
+  }
+}
+
+module.exports = {
+  initializePool,
+  getConnection,
+  query,
+  transaction,
+  closePool,
+};
