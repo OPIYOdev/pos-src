@@ -8,6 +8,10 @@ import { AuthProvider } from "./contexts/AuthContext";
 import Home from "./pages/Home";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
+import POSPage from "./pages/POSPage";
+import CustomerPage from "./pages/CustomerPage";
+import InventoryPage from "./pages/InventoryPage";
+import GRNPage from "./pages/GRNPage";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -16,6 +20,10 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/login"} component={LoginPage} />
       <Route path={"/dashboard"} component={DashboardPage} />
+      <Route path={"/pos"} component={POSPage} />
+      <Route path={"/customers"} component={CustomerPage} />
+      <Route path={"/inventory"} component={InventoryPage} />
+      <Route path={"/grn"} component={GRNPage} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
