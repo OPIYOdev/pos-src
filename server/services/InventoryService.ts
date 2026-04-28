@@ -44,6 +44,7 @@ export class InventoryService {
    * Create GRN (Goods Received Note) with tolerance validation
    */
   async createGRN(params: {
+    userId: number;
     branchId: number;
     supplierId: number;
     invoiceNumber: string;
@@ -87,9 +88,62 @@ export class InventoryService {
       }
     }
 
-    // TODO: Create GRN record in database
-    // TODO: Create inventory batches for each item
-    // TODO: Log audit trail
+        const grnResult = await db.createGrn({
+      grnNumber,
+      branchId: params.branchId,
+      supplierId: params.supplierId,
+      invoiceNumber: params.invoiceNumber,
+      status: discrepancies.length === 0 ? "verified" : "pending_review",
+      verifiedBy: params.userId, // Assuming userId is passed in params for GRN creation
+    });
+
+    for (const item of params.items) {
+      await db.createGrnItem({
+        grnId: grnResult.insertId,
+        productId: item.productId,
+        batchNumber: item.batchNumber,
+        quantityOrdered: item.quantityOrdered,
+        quantityReceived: item.quantityReceived,
+        expiryDate: item.expiryDate,
+        costPrice: item.costPrice,
+      });
+
+      await db.createInventoryBatch({
+        branchId: params.branchId,
+        productId: item.productId,
+        batchNumber: item.batchNumber,
+        quantityAvailable: item.quantityReceived,
+        expiryDate: item.expiryDate,
+        costPrice: item.costPrice,
+        sellingPrice: item.costPrice * 1.2, // Assuming 20% markup for selling price
+      });
+
+      // Log inventory transaction
+      await db.createInventoryTransaction({
+        batchId: inventoryBatchResult.insertId,
+        productId: item.productId,
+        branchId: params.branchId,
+        transactionType: "GRN",
+        quantity: item.quantityReceived,
+        currentQuantity: item.quantityReceived, // This will be updated later
+        reason: "Goods Received",
+        referenceId: grnResult.insertId,
+        userId: params.userId,
+      });
+    }
+
+    // Log audit trail
+    // Assuming userId is available in params
+    await db.createAuditLog({
+      userId: params.userId,
+      action: "CREATE",
+      module: "INVENTORY",
+      entityType: "GRN",
+      entityId: grnNumber,
+      newValues: { grnNumber, itemCount: params.items.length },
+      status: "success",
+    });
+
     // TODO: Trigger low-stock alerts if needed
 
     return {
@@ -104,32 +158,44 @@ export class InventoryService {
    * Check for low-stock items and generate reorder requests
    */
   async checkLowStockAndReorder(branchId: number) {
-    // TODO: Implement low-stock checking
-    // 1. Query all products at branch
-    // 2. For each product, check available stock vs reorder level
-    // 3. Generate automatic reorder requests for low-stock items
-    // 4. Notify inventory manager
+        const lowStockProducts = await db.getProductsBelowReorderLevel(branchId);
 
+    // In a real system, this would generate reorder requests and notify managers.
+    // For now, we just return the list of low stock items.
     return {
-      lowStockItems: [],
+      lowStockItems: lowStockProducts.map((p) => ({
+        productId: p.product.id,
+        productName: p.product.genericName,
+        currentStock: p.totalAvailable,
+        reorderLevel: p.product.reorderLevel,
+        reorderQuantity: p.product.reorderQuantity,
+      })),
       reorderRequestsCreated: 0,
     };
+
+
   }
 
   /**
    * Check for expiring batches and generate alerts
    */
   async checkExpiringBatches(branchId: number, daysUntilExpiry: number = 30) {
-    // TODO: Implement expiry checking
-    // 1. Query batches expiring within specified days
-    // 2. Generate alerts for pharmacist
-    // 3. Suggest FEFO-based dispensing order
-    // 4. Flag for potential write-off if not sold
+        const expiringBatches = await db.getExpiringBatches(branchId, daysUntilExpiry);
 
+    // In a real system, this would generate alerts for pharmacists and suggest dispensing order.
+    // For now, we just return the list of expiring batches.
     return {
-      expiringBatches: [],
-      alertCount: 0,
+      expiringBatches: expiringBatches.map((b) => ({
+        batchId: b.id,
+        productId: b.productId,
+        batchNumber: b.batchNumber,
+        quantityAvailable: b.quantityAvailable,
+        expiryDate: b.expiryDate,
+      })),
+      alertCount: expiringBatches.length,
     };
+
+
   }
 
   /**
@@ -143,36 +209,77 @@ export class InventoryService {
     reference: string;
     createdBy: number;
   }) {
-    // TODO: Implement inventory adjustment
-    // 1. Validate batch exists
-    // 2. Update batch quantity
-    // 3. Create inventory transaction record
-    // 4. Log audit trail
-    // 5. Trigger alerts if significant loss
+        const batch = await db.getInventoryBatchById(params.batchId);
+    if (!batch) {
+      throw new Error(`Batch with ID ${params.batchId} not found`);
+    }
+
+    await db.updateInventoryBatchQuantity(params.batchId, params.quantityChange);
+
+    const updatedBatch = await db.getInventoryBatchById(params.batchId);
+
+    await db.createInventoryTransaction({
+      batchId: params.batchId,
+      productId: batch.productId,
+      branchId: params.branchId,
+      transactionType: "ADJUSTMENT",
+      quantity: params.quantityChange,
+      currentQuantity: updatedBatch?.quantityAvailable || 0,
+      reason: params.reason,
+      referenceId: params.batchId,
+      userId: params.createdBy,
+    });
+
+    await db.createAuditLog({
+      userId: params.createdBy,
+      action: "UPDATE",
+      module: "INVENTORY",
+      entityType: "BATCH",
+      entityId: params.batchId.toString(),
+      oldValues: { quantity: batch.quantityAvailable },
+      newValues: { quantity: updatedBatch?.quantityAvailable },
+      status: "success",
+    });
 
     return {
       success: true,
-      newQuantity: 0,
+      newQuantity: updatedBatch?.quantityAvailable || 0,
     };
+
+
   }
 
   /**
    * Generate inventory valuation report
    */
   async generateInventoryValuation(branchId: number) {
-    // TODO: Implement inventory valuation
-    // 1. Get all batches at branch
-    // 2. Calculate total value (quantity * cost price)
-    // 3. Identify slow-moving stock
-    // 4. Calculate potential write-offs
-    // 5. Generate report
+        const valuationData = await db.getInventoryValuationData(branchId);
+
+    let totalValue = 0;
+    const slowMovingItems: any[] = [];
+    const potentialWriteOffs: any[] = [];
+
+    for (const item of valuationData) {
+      const itemValue = parseFloat(item.quantity.toString()) * parseFloat(item.costPrice.toString());
+      totalValue += itemValue;
+
+      // Simple logic for slow-moving and potential write-offs (can be expanded)
+      if (item.quantity > 100 && item.expiryDate && new Date(item.expiryDate) < new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)) {
+        slowMovingItems.push(item);
+      }
+      if (item.expiryDate && new Date(item.expiryDate) < new Date()) {
+        potentialWriteOffs.push(item);
+      }
+    }
 
     return {
-      totalValue: 0,
-      batchCount: 0,
-      slowMovingItems: [],
-      potentialWriteOffs: [],
+      totalValue,
+      batchCount: valuationData.length,
+      slowMovingItems,
+      potentialWriteOffs,
     };
+
+
   }
 }
 

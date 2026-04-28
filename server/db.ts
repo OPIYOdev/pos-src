@@ -361,6 +361,549 @@ export async function getTransferOrderById(orderId: number) {
 // AUDIT LOG QUERIES
 // ============================================================================
 
+export async function createSaleItem(itemData: {
+  saleId: number;
+  productId: number;
+  batchId: number;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(saleItems).values({
+    saleId: itemData.saleId,
+    productId: itemData.productId,
+    batchId: itemData.batchId,
+    quantity: itemData.quantity as any,
+    unitPrice: itemData.unitPrice as any,
+    totalPrice: itemData.totalPrice as any,
+  } as any);
+}
+
+export async function deductInventoryBatch(
+  batchId: number,
+  quantityToDeduct: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db
+    .update(inventoryBatches)
+    .set({
+      quantityAvailable: sql`${inventoryBatches.quantityAvailable} - ${quantityToDeduct}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(inventoryBatches.id, batchId));
+}
+
+// ============================================================================
+// AUDIT LOG QUERIES
+// ============================================================================
+
+export async function createPaymentMethod(paymentData: {
+  saleId: number;
+  methodType: "Cash" | "M-Pesa" | "Card" | "Insurance";
+  amount: number;
+  reference?: string;
+  status: "pending" | "completed" | "failed";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(paymentMethods).values({
+    saleId: paymentData.saleId,
+    methodType: paymentData.methodType,
+    amount: paymentData.amount as any,
+    reference: paymentData.reference,
+    status: paymentData.status,
+  } as any);
+}
+
+export async function updateSaleStatus(saleId: number, status: "pending" | "completed" | "failed" | "refunded") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.update(sales).set({ paymentStatus: status, updatedAt: new Date() }).where(eq(sales.id, saleId));
+}
+
+export async function createGrn(grnData: {
+  grnNumber: string;
+  branchId: number;
+  supplierId: number;
+  invoiceNumber?: string;
+  status: "pending" | "verified" | "rejected";
+  verifiedBy?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(grn).values({
+    grnNumber: grnData.grnNumber,
+    branchId: grnData.branchId,
+    supplierId: grnData.supplierId,
+    invoiceNumber: grnData.invoiceNumber,
+    status: grnData.status,
+    verifiedBy: grnData.verifiedBy,
+  } as any);
+}
+
+export async function createGrnItem(itemData: {
+  grnId: number;
+  productId: number;
+  batchNumber: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  expiryDate: string;
+  costPrice: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(grnItems).values({
+    grnId: itemData.grnId,
+    productId: itemData.productId,
+    batchNumber: itemData.batchNumber,
+    quantityOrdered: itemData.quantityOrdered as any,
+    quantityReceived: itemData.quantityReceived as any,
+    expiryDate: itemData.expiryDate,
+    costPrice: itemData.costPrice as any,
+  } as any);
+}
+
+export async function createInventoryBatch(batchData: {
+  branchId: number;
+  productId: number;
+  batchNumber: string;
+  quantityAvailable: number;
+  expiryDate: string;
+  costPrice: number;
+  sellingPrice: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(inventoryBatches).values({
+    branchId: batchData.branchId,
+    productId: batchData.productId,
+    batchNumber: batchData.batchNumber,
+    quantityAvailable: batchData.quantityAvailable as any,
+    expiryDate: batchData.expiryDate,
+    costPrice: batchData.costPrice as any,
+    sellingPrice: batchData.sellingPrice as any,
+  } as any);
+}
+
+export async function updateInventoryBatchQuantity(
+  batchId: number,
+  quantityChange: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db
+    .update(inventoryBatches)
+    .set({
+      quantityAvailable: sql`${inventoryBatches.quantityAvailable} + ${quantityChange}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(inventoryBatches.id, batchId));
+}
+
+export async function createInventoryTransaction(transactionData: {
+  batchId: number;
+  productId: number;
+  branchId: number;
+  transactionType: "GRN" | "SALE" | "ADJUSTMENT" | "TRANSFER_IN" | "TRANSFER_OUT";
+  quantity: number;
+  currentQuantity: number;
+  reason?: string;
+  referenceId?: number;
+  userId?: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(inventoryTransactions).values({
+    batchId: transactionData.batchId,
+    productId: transactionData.productId,
+    branchId: transactionData.branchId,
+    transactionType: transactionData.transactionType,
+    quantity: transactionData.quantity as any,
+    currentQuantity: transactionData.currentQuantity as any,
+    reason: transactionData.reason,
+    referenceId: transactionData.referenceId,
+    userId: transactionData.userId,
+  } as any);
+}
+
+export async function getProductsBelowReorderLevel(branchId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({ product: products, totalAvailable: sql<number>`sum(${inventoryBatches.quantityAvailable})` })
+    .from(products)
+    .leftJoin(inventoryBatches, eq(products.id, inventoryBatches.productId))
+    .where(eq(inventoryBatches.branchId, branchId))
+    .groupBy(products.id)
+    .having(sql`sum(${inventoryBatches.quantityAvailable}) < ${products.reorderLevel}`);
+}
+
+export async function getExpiringBatches(branchId: number, daysUntilExpiry: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const expiryDateThreshold = new Date();
+  expiryDateThreshold.setDate(expiryDateThreshold.getDate() + daysUntilExpiry);
+
+  return db
+    .select()
+    .from(inventoryBatches)
+    .where(
+      and(
+        eq(inventoryBatches.branchId, branchId),
+        lte(inventoryBatches.expiryDate, expiryDateThreshold),
+        gte(inventoryBatches.quantityAvailable, 0)
+      )
+    )
+    .orderBy(asc(inventoryBatches.expiryDate));
+}
+
+export async function getInventoryValuationData(branchId: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  return db
+    .select({
+      productId: products.id,
+      productName: products.genericName,
+      batchNumber: inventoryBatches.batchNumber,
+      quantity: inventoryBatches.quantityAvailable,
+      costPrice: inventoryBatches.costPrice,
+      expiryDate: inventoryBatches.expiryDate,
+    })
+    .from(inventoryBatches)
+    .innerJoin(products, eq(inventoryBatches.productId, products.id))
+    .where(eq(inventoryBatches.branchId, branchId));
+}
+
+export async function getInventoryBatchById(batchId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(inventoryBatches)
+    .where(eq(inventoryBatches.id, batchId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function createTransferRequest(requestData: {
+  requestId: string;
+  sourceBranchId: number;
+  destinationBranchId: number;
+  requestedBy: number;
+  priority: "urgent" | "normal" | "low";
+  reason: string;
+  requiredByDate?: string;
+  status: "pending_approval" | "approved" | "rejected" | "dispatched" | "received" | "completed" | "cancelled";
+  totalEstimatedValue: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(transferRequests).values({
+    requestId: requestData.requestId,
+    sourceBranchId: requestData.sourceBranchId,
+    destinationBranchId: requestData.destinationBranchId,
+    requestedBy: requestData.requestedBy,
+    priority: requestData.priority,
+    reason: requestData.reason,
+    requiredByDate: requestData.requiredByDate,
+    status: requestData.status,
+    totalEstimatedValue: requestData.totalEstimatedValue as any,
+  } as any);
+}
+
+export async function createTransferRequestItem(itemData: {
+  transferRequestId: number;
+  productId: number;
+  quantityRequested: number;
+  quantityApproved: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(transferRequestItems).values({
+    transferRequestId: itemData.transferRequestId,
+    productId: itemData.productId,
+    quantityRequested: itemData.quantityRequested as any,
+    quantityApproved: itemData.quantityApproved as any,
+  } as any);
+}
+
+export async function createTransferOrder(orderData: {
+  transferRequestId: number;
+  orderNumber: string;
+  sourceBranchId: number;
+  destinationBranchId: number;
+  approvedBy: number;
+  status: "created" | "dispatched" | "received" | "cancelled";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(transferOrders).values({
+    transferRequestId: orderData.transferRequestId,
+    orderNumber: orderData.orderNumber,
+    sourceBranchId: orderData.sourceBranchId,
+    destinationBranchId: orderData.destinationBranchId,
+    approvedBy: orderData.approvedBy,
+    status: orderData.status,
+  } as any);
+}
+
+export async function createTransferOrderItem(itemData: {
+  transferOrderId: number;
+  productId: number;
+  batchId: number;
+  quantity: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(transferOrderItems).values({
+    transferOrderId: itemData.transferOrderId,
+    productId: itemData.productId,
+    batchId: itemData.batchId,
+    quantity: itemData.quantity as any,
+  } as any);
+}
+
+export async function updateTransferRequestStatus(
+  requestId: number,
+  status: "pending_approval" | "approved" | "rejected" | "dispatched" | "received" | "completed" | "cancelled"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db
+    .update(transferRequests)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(transferRequests.id, requestId));
+}
+
+export async function updateInventoryBatchReserved(
+  batchId: number,
+  quantityChange: number
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db
+    .update(inventoryBatches)
+    .set({
+      quantityReserved: sql`${inventoryBatches.quantityReserved} + ${quantityChange}`,
+      updatedAt: new Date(),
+    })
+    .where(eq(inventoryBatches.id, batchId));
+}
+
+export async function updateTransferOrderStatus(
+  orderId: number,
+  status: "created" | "dispatched" | "received" | "cancelled"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db
+    .update(transferOrders)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(transferOrders.id, orderId));
+}
+
+export async function createTransferCost(costData: {
+  transferOrderId: number;
+  transportCost: number;
+  handlingFee: number;
+  insuranceCost: number;
+  totalCost: number;
+  sourcePortion: number;
+  destinationPortion: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(transferCosts).values({
+    transferOrderId: costData.transferOrderId,
+    transportCost: costData.transportCost as any,
+    handlingFee: costData.handlingFee as any,
+    insuranceCost: costData.insuranceCost as any,
+    totalCost: costData.totalCost as any,
+    sourcePortion: costData.sourcePortion as any,
+    destinationPortion: costData.destinationPortion as any,
+  } as any);
+}
+
+export async function getTransferOrderItemById(itemId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(transferOrderItems)
+    .where(eq(transferOrderItems.id, itemId))
+    .limit(1);
+
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getTransferOrderDetails(orderId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const result = await db
+    .select()
+    .from(transferOrders)
+    .leftJoin(transferOrderItems, eq(transferOrders.id, transferOrderItems.transferOrderId))
+    .leftJoin(products, eq(transferOrderItems.productId, products.id))
+    .where(eq(transferOrders.id, orderId));
+
+  if (result.length === 0) return null;
+
+  const order = result[0].transfer_orders;
+  const items = result.map(row => ({
+    ...row.transfer_order_items,
+    product: row.products,
+  }));
+
+  return { ...order, items };
+}
+
+export async function getCompletedTransfersAsSource(branchId: number, month: number, year: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+
+  return db
+    .select()
+    .from(transferOrders)
+    .where(
+      and(
+        eq(transferOrders.sourceBranchId, branchId),
+        eq(transferOrders.status, "completed"),
+        gte(transferOrders.createdAt, startDate),
+        lte(transferOrders.createdAt, endDate)
+      )
+    );
+}
+
+export async function getCompletedTransfersAsDestination(branchId: number, month: number, year: number) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+
+  return db
+    .select()
+    .from(transferOrders)
+    .where(
+      and(
+        eq(transferOrders.destinationBranchId, branchId),
+        eq(transferOrders.status, "completed"),
+        gte(transferOrders.createdAt, startDate),
+        lte(transferOrders.createdAt, endDate)
+      )
+    );
+}
+
+export async function createInterBranchSettlement(settlementData: {
+  branchId: number;
+  settlementMonth: string;
+  valueSent: number;
+  valueReceived: number;
+  netSettlement: number;
+  status: "balanced" | "pending" | "settled";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(interBranchSettlements).values({
+    branchId: settlementData.branchId,
+    settlementMonth: settlementData.settlementMonth,
+    valueSent: settlementData.valueSent as any,
+    valueReceived: settlementData.valueReceived as any,
+    netSettlement: settlementData.netSettlement as any,
+    status: settlementData.status,
+  } as any);
+}
+
+export async function createInsuranceClaim(claimData: {
+  patientId: number;
+  policyNumber: string;
+  claimAmount: number;
+  eligibleAmount: number;
+  submittedBy: number;
+  status: "pending" | "approved" | "rejected";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(insuranceClaims).values({
+    patientId: claimData.patientId,
+    policyNumber: claimData.policyNumber,
+    claimAmount: claimData.claimAmount as any,
+    eligibleAmount: claimData.eligibleAmount as any,
+    submittedBy: claimData.submittedBy,
+    status: claimData.status,
+  } as any);
+}
+
+export async function updateInsuranceClaimStatus(
+  claimId: number,
+  status: "pending" | "approved" | "rejected"
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db
+    .update(insuranceClaims)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(insuranceClaims.id, claimId));
+}
+
+export async function createKRASubmission(submissionData: {
+  invoiceId: number;
+  branchId: number;
+  amount: number;
+  taxAmount: number;
+  submittedBy: number;
+  kraReference: string;
+  status: "submitted" | "failed";
+  message: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.insert(kraSubmissions).values({
+    invoiceId: submissionData.invoiceId,
+    branchId: submissionData.branchId,
+    amount: submissionData.amount as any,
+    taxAmount: submissionData.taxAmount as any,
+    submittedBy: submissionData.submittedBy,
+    kraReference: submissionData.kraReference,
+    status: submissionData.status,
+    message: submissionData.message,
+  } as any);
+}
+
 export async function createAuditLog(auditData: {
   userId: number;
   action: string;

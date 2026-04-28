@@ -78,8 +78,33 @@ export class SalesService {
       netAmount,
     });
 
-    // TODO: Create sale items and deduct inventory
-    // TODO: Process payments
+        // Create sale items and deduct inventory
+    for (const item of params.items) {
+      await db.createSaleItem({
+        saleId: saleResult.insertId,
+        productId: item.productId,
+        batchId: item.batchId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        totalPrice: item.quantity * item.unitPrice,
+      });
+      await db.deductInventoryBatch(item.batchId, item.quantity);
+    }
+
+    // Process payments
+    for (const payment of params.paymentMethods) {
+      await db.createPaymentMethod({
+        saleId: saleResult.insertId,
+        methodType: payment.methodType,
+        amount: payment.amount,
+        reference: payment.reference,
+        status: "completed",
+      });
+    }
+
+    // Update sale status to completed
+    await db.updateSaleStatus(saleResult.insertId, "completed");
+
     // TODO: Generate KRA eTIMS receipt
     // TODO: Generate customer receipt
 
