@@ -1,6 +1,8 @@
 import * as db from "../db";
 
 /**
+ * MOCKs: COMPLETE IMPLEMENTATION, NOT COMPLETE
+ * WORK IN PROGRESS
  * InsuranceService - Handles insurance claim processing and eligibility checks
  */
 export class InsuranceService {

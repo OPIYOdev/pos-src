@@ -1,6 +1,8 @@
 import * as db from "../db";
 
 /**
+ * TODOs: COMPLETE IMPLEMENTATION, NOT COMPLETE
+ * WORK IN PROGRESS
  * TransferService - Handles multi-branch transfer operations
  * Implements FEFO batch selection, cost allocation, and settlement logic
  */

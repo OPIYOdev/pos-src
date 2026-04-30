@@ -1,4 +1,6 @@
 /**
+ * TODOs: COMPLETE IMPLEMENTATION, NOT COMPLETE
+ * WORK IN PROGRESS
  * Sales Routes
  * POS transactions, payments, and receipts
  */

@@ -2,6 +2,7 @@ import { decimal } from "drizzle-orm/mysql-core";
 import * as db from "../db";
 
 /**
+ * TODOs: COMPLETE IMPLEMENTATION, NOT COMPLETE
  * SalesService - Handles all sales transaction logic
  * Enforces business rules: inventory deduction, payment processing, receipt generation
  */
@@ -105,8 +106,8 @@ export class SalesService {
     // Update sale status to completed
     await db.updateSaleStatus(saleResult.insertId, "completed");
 
-    // TODO: Generate KRA eTIMS receipt
-    // TODO: Generate customer receipt
+    // TODO: Generate KRA eTIMS receipt.
+    // TODO: Generate customer receipt.
 
     return {
       success: true,

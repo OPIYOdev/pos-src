@@ -1,6 +1,8 @@
 import * as db from "../db";
 
 /**
+ * TODOs: COMPLETE IMPLEMENTATION, NOT COMPLETE
+ * WORK IN PROGRESSs
  * InventoryService - Handles all inventory management operations
  * Enforces FEFO (First Expiry First Out), batch tracking, and low-stock alerts
  */
